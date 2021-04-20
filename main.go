@@ -101,9 +101,8 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 	}
 
 	newRecord := &namecom.Record{
-		Type: "TXT",
-		Host: extractRecordName(ch.ResolvedFQDN, ch.ResolvedZone),
-		//Fqdn:       ch.ResolvedFQDN,
+		Type:       "TXT",
+		Host:       extractRecordName(ch.ResolvedFQDN, ch.ResolvedZone),
 		DomainName: ch.ResolvedZone[:len(ch.ResolvedZone)-1],
 		Answer:     ch.Key,
 		TTL:        300,

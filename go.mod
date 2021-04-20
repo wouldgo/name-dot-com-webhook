@@ -1,4 +1,4 @@
-module github.com/cert-manager/webhook-example
+module github.com/wouldgo/name-dot-com-webhook
 
 go 1.13
 
