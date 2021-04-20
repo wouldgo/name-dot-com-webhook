@@ -8,14 +8,16 @@
 # The name will need to be referenced in each Issuer's `webhook` stanza to
 # inform cert-manager of where to send ChallengePayload resources in order to
 # solve the DNS01 challenge.
-groupName: acme.mycompany.com
+# This group name should be **unique**, hence using your own company's domain
+# here is recommended.
+groupName: wouldgo.me
 
 certManager:
   namespace: cert-manager
   serviceAccountName: cert-manager
 
 image:
-  repository: mycompany/webhook-image
+  repository: name-dot-com-webhook
   tag: latest
   pullPolicy: IfNotPresent
 

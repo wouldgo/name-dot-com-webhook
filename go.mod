@@ -1,13 +1,21 @@
-module github.com/cert-manager/webhook-example
+module github.com/wouldgo/name-dot-com-webhook
 
 go 1.26.0
 
 require (
+	github.com/breml/rootcerts v0.2.10
 	github.com/cert-manager/cert-manager v1.21.3
+	github.com/cert-manager/webhook-example v0.0.0-20261114122313-60e3ea9585e8
 	github.com/miekg/dns v1.1.73
+	github.com/namedotcom/go/v4 v4.0.2
 	github.com/stretchr/testify v1.12.1
 	k8s.io/apiextensions-apiserver v0.37.2
 	k8s.io/client-go v0.37.2
+)
+
+require (
+	k8s.io/apimachinery v0.37.2
+	k8s.io/klog/v2 v2.140.0
 )
 
 require (
@@ -100,10 +108,8 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	k8s.io/api v0.37.2 // indirect
-	k8s.io/apimachinery v0.37.2 // indirect
 	k8s.io/apiserver v0.37.2 // indirect
 	k8s.io/component-base v0.37.2 // indirect
-	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kms v0.37.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/streaming v0.37.2 // indirect
