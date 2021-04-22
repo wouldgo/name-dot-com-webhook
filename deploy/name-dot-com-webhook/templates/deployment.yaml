@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "example-webhook.fullname" . }}
+  name: {{ include "example-webhook.name" . }}
   labels:
     app: {{ include "example-webhook.name" . }}
     chart: {{ include "example-webhook.chart" . }}
@@ -19,7 +19,7 @@ spec:
         app: {{ include "example-webhook.name" . }}
         release: {{ .Release.Name }}
     spec:
-      serviceAccountName: {{ include "example-webhook.fullname" . }}
+      serviceAccountName: {{ include "example-webhook.name" . }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
