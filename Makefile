@@ -37,4 +37,4 @@ rendered-manifest.yaml:
         deploy/name-dot-com-webhook > "$(OUT)/rendered-manifest.yaml"
 
 test-github-action-build:
-	act --secret-file test-env -j build
+	act --secret-file ./act-env -j build
