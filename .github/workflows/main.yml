@@ -23,13 +23,6 @@ jobs:
         with:
           install: true
       -
-        id: prepare
-        name: Prepare
-        run: |
-          echo ::set-output name=docker_platform::${DOCKER_TARGET_PLATFORM}
-          echo ::set-output name=docker_image::${DOCKER_REGISTRY}/${DOCKER_IMAGE}
-          echo ::set-output name=version::$(git describe | sed -e 's/v//g')
-      -
         id: login-registry
         name: Log into registry
         # This is where you will update the PAT to GITHUB_TOKEN
@@ -41,7 +34,7 @@ jobs:
         name: Build
         run: |
           docker build \
-          --platform ${{ steps.prepare.outputs.docker_platform }} \
-          --tag ${{ steps.prepare.outputs.docker_image }}:${{ steps.prepare.outputs.version }} \
+          --platform ${DOCKER_TARGET_PLATFORM} \
+          --tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:$(git tag --points-at HEAD | sed 's/v//g') \
           --push \
           .
