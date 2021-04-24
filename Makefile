@@ -1,7 +1,7 @@
 OS ?= $(shell go env GOOS)
 ARCH ?= $(shell go env GOARCH)
 
-IMAGE_NAME := "name-dot-com-webhook"
+IMAGE_NAME := "wouldgo/name-dot-com-webhook"
 IMAGE_TAG := "latest"
 
 OUT := $(shell pwd)/_out
@@ -35,3 +35,6 @@ rendered-manifest.yaml:
 	      --set image.repository=$(IMAGE_NAME) \
         --set image.tag=$(IMAGE_TAG) \
         deploy/name-dot-com-webhook > "$(OUT)/rendered-manifest.yaml"
+
+test-github-action-build:
+	act --secret-file test-env -j build
