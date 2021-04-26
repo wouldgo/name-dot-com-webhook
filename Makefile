@@ -26,15 +26,9 @@ clean: clean-kubebuilder
 clean-kubebuilder:
 	rm -Rf _test/kubebuilder
 
-build:
-	docker build -t "$(IMAGE_NAME):$(IMAGE_TAG)" .
-
 .PHONY: rendered-manifest.yaml
 rendered-manifest.yaml:
 	helm template \
 	      --set image.repository=$(IMAGE_NAME) \
         --set image.tag=$(IMAGE_TAG) \
         deploy/name-dot-com-webhook > "$(OUT)/rendered-manifest.yaml"
-
-test-github-action-build:
-	act --secret-file ./act-env -j build
