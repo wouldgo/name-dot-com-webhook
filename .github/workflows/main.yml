@@ -10,7 +10,7 @@ jobs:
     env:
       DOCKER_REGISTRY: ghcr.io/wouldgo
       DOCKER_IMAGE: name-dot-com-webhook
-      DOCKER_TARGET_PLATFORM: linux/arm64
+      DOCKER_TARGET_PLATFORM: linux/arm64,linux/amd64
     steps:
       -
         id: checkout
