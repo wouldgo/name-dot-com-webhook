@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/cert-manager/cert-manager/test/acme/dns"
-	"github.com/wouldgo/name-dot-com-webhook/example"
 )
 
 var (
@@ -25,10 +24,12 @@ func TestRunsSuite(t *testing.T) {
 	//	dns.SetManifestPath("testdata/my-custom-solver"),
 	//	dns.SetBinariesPath("_test/kubebuilder/bin"),
 	//)
-	solver := example.New("59351")
-	fixture := dns.NewFixture(solver,
+	//solver := example.New("59351")
+
+	fixture := dns.NewFixture(&nameDotComDNSProviderSolver{},
 		dns.SetResolvedZone("example.com."),
-		dns.SetManifestPath("testdata/my-custom-solver"),
+		dns.SetManifestPath("testdata/name-dot-com-solver"),
+		dns.SetConfig(nameDotComDNSProviderConfig{}),
 		dns.SetDNSServer("127.0.0.1:59351"),
 		dns.SetUseAuthoritative(false),
 	)

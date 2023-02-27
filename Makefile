@@ -3,7 +3,7 @@ OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 
 IMAGE_NAME := "ghcr.io/wouldgo/name-dot-com-webhook"
-IMAGE_TAG := "0.0.4"
+IMAGE_TAG := "0.0.5"
 
 OUT := $(shell pwd)/_out
 
@@ -15,7 +15,7 @@ export TEST_ASSET_KUBE_APISERVER=_test/kubebuilder/kube-apiserver
 export TEST_ASSET_KUBECTL=_test/kubebuilder/kubectl
 
 test: _test/kubebuilder
-	$(GO) test -v .
+	TEST_ASSET_ETCD=./_test/etcd $(GO) test -v .
 
 _test/kubebuilder:
 	curl -fsSL https://go.kubebuilder.io/test-tools/$(KUBE_VERSION)/$(OS)/$(ARCH) -o kubebuilder-tools.tar.gz
@@ -33,7 +33,7 @@ clean-kubebuilder:
 .PHONY: rendered-manifest.yaml
 rendered-manifest.yaml:
 	helm template \
-	    --name example-webhook \
-            --set image.repository=$(IMAGE_NAME) \
-            --set image.tag=$(IMAGE_TAG) \
-            deploy/example-webhook > "$(OUT)/rendered-manifest.yaml"
+		--name example-webhook \
+		--set image.repository=$(IMAGE_NAME) \
+		--set image.tag=$(IMAGE_TAG) \
+		deploy/example-webhook > "$(OUT)/rendered-manifest.yaml"

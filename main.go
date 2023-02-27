@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	extapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
@@ -37,18 +42,17 @@ func main() {
 // To do so, it must implement the `github.com/cert-manager/cert-manager/pkg/acme/webhook.Solver`
 // interface.
 type nameDotComDNSProviderSolver struct {
-	// If a Kubernetes 'clientset' is needed, you must:
-	// 1. uncomment the additional `client` field in this structure below
-	// 2. uncomment the "k8s.io/client-go/kubernetes" import at the top of the file
-	// 3. uncomment the relevant code in the Initialize method below
-	// 4. ensure your webhook's service account has the required RBAC role
-	//    assigned to it for interacting with the Kubernetes APIs you need.
-	//client kubernetes.Clientset
+	client kubernetes.Clientset
 
 	nameDotComClient *namecom.NameCom
 }
 
-// customDNSProviderConfig is a structure that is used to decode into when
+type secretRefType struct {
+	Name      *string `json:"name"`
+	Namespace *string `json:"namespace"`
+}
+
+// nameDotComDNSProviderConfig is a structure that is used to decode into when
 // solving a DNS01 challenge.
 // This information is provided by cert-manager, and may be a reference to
 // additional configuration that's needed to solve the challenge for this
@@ -62,14 +66,15 @@ type nameDotComDNSProviderSolver struct {
 // You should not include sensitive information here. If credentials need to
 // be used by your provider here, you should reference a Kubernetes Secret
 // resource and fetch these credentials using a Kubernetes clientset.
-type customDNSProviderConfig struct {
+type nameDotComDNSProviderConfig struct {
 	// Change the two fields below according to the format of the configuration
 	// to be decoded.
 	// These fields will be set by users in the
 	// `issuer.spec.acme.dns01.providers.webhook.config` field.
 
-	UserName string `json:"username"`
-	Token    string `json:"token"`
+	UserName  *string        `json:"username"`
+	Token     *string        `json:"token"`
+	SecretRef *secretRefType `json:"secretMapRef"`
 }
 
 // Name is used as the name for this DNS solver when referencing it on the ACME
@@ -88,14 +93,14 @@ func (c *nameDotComDNSProviderSolver) Name() string {
 // cert-manager itself will later perform a self check to ensure that the
 // solver has correctly configured the DNS provider.
 func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
-	cfg, err := loadConfig(ch.Config)
+	cfg, err := c.loadConfig(ch.Config)
 	if err != nil {
 		return err
 	}
 
 	if c.nameDotComClient == nil {
 
-		c.nameDotComClient = namecom.New(cfg.UserName, cfg.Token)
+		c.nameDotComClient = namecom.New(*cfg.UserName, *cfg.Token)
 	}
 
 	newRecord := &namecom.Record{
@@ -122,14 +127,14 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 // This is in order to facilitate multiple DNS validations for the same domain
 // concurrently.
 func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
-	cfg, err := loadConfig(ch.Config)
+	cfg, err := c.loadConfig(ch.Config)
 	if err != nil {
 		return err
 	}
 
 	if c.nameDotComClient == nil {
 
-		c.nameDotComClient = namecom.New(cfg.UserName, cfg.Token)
+		c.nameDotComClient = namecom.New(*cfg.UserName, *cfg.Token)
 	}
 
 	domainName := ch.ResolvedZone[:len(ch.ResolvedZone)-1]
@@ -177,30 +182,66 @@ func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) err
 // The stopCh can be used to handle early termination of the webhook, in cases
 // where a SIGTERM or similar signal is sent to the webhook process.
 func (c *nameDotComDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
-	///// UNCOMMENT THE BELOW CODE TO MAKE A KUBERNETES CLIENTSET AVAILABLE TO
-	///// YOUR CUSTOM DNS PROVIDER
+	clientset, err := kubernetes.NewForConfig(kubeClientConfig)
+	if err != nil {
+		return err
+	}
+	c.client = *clientset
 
-	//cl, err := kubernetes.NewForConfig(kubeClientConfig)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//c.client = cl
-
-	///// END OF CODE TO MAKE KUBERNETES CLIENTSET AVAILABLE
 	return nil
 }
 
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
-func loadConfig(cfgJSON *extapi.JSON) (customDNSProviderConfig, error) {
-	cfg := customDNSProviderConfig{}
+func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDotComDNSProviderConfig, error) {
+	cfg := &nameDotComDNSProviderConfig{}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
-		return cfg, nil
+		return nil, errors.New("Configuration must be provided")
 	}
-	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
-		return cfg, fmt.Errorf("error decoding solver config: %v", err)
+
+	if err := json.Unmarshal(cfgJSON.Raw, cfg); err != nil {
+		return nil, fmt.Errorf("error decoding solver config: %v", err)
+	}
+
+	if (cfg.Token == nil && cfg.UserName == nil) || cfg.SecretRef == nil {
+		return nil, errors.New("Either pair username/token or secretRef must be specified ")
+	}
+
+	if cfg.SecretRef != nil {
+
+		secretNamespace := cfg.SecretRef.Namespace
+		secretName := cfg.SecretRef.Name
+
+		if secretNamespace == nil {
+			*secretNamespace = "name-dot-com"
+		}
+
+		ctx, cancelFunct := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelFunct()
+		secret, secretErr := c.client.CoreV1().Secrets(*secretNamespace).Get(ctx, *secretName, v1.GetOptions{})
+
+		if secretErr != nil {
+			return nil, secretErr
+		}
+
+		secretData := secret.Data
+
+		if secretData["username"] == nil || secretData["token"] == nil {
+
+			return nil, fmt.Errorf("Secret %s/%s not containing either username or token", *secretNamespace, *secretName)
+		}
+
+		*cfg.UserName = string(secretData["username"])
+		*cfg.Token = string(secretData["token"])
+
+		select {
+		case <-ctx.Done():
+
+			return nil, ctx.Err()
+		default:
+
+		}
 	}
 
 	return cfg, nil
