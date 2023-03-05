@@ -194,13 +194,13 @@ func (c *nameDotComDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, 
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
 func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDotComDNSProviderConfig, error) {
-	cfg := &nameDotComDNSProviderConfig{}
+	cfg := nameDotComDNSProviderConfig{}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
 		return nil, errors.New("Configuration must be provided")
 	}
 
-	if err := json.Unmarshal(cfgJSON.Raw, cfg); err != nil {
+	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
 		return nil, fmt.Errorf("error decoding solver config: %v", err)
 	}
 
