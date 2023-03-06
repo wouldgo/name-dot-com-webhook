@@ -3,27 +3,28 @@ OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 
 IMAGE_NAME := "ghcr.io/wouldgo/name-dot-com-webhook"
-IMAGE_TAG := "0.0.7"
+IMAGE_TAG := "0.1.0"
 
 OUT := $(shell pwd)/_out
 
-KUBE_VERSION=1.25.0
+KUBEBUILDER_VERSION=2.3.2
 
 $(shell mkdir -p "$(OUT)")
-export TEST_ASSET_ETCD=_test/kubebuilder/etcd
-export TEST_ASSET_KUBE_APISERVER=_test/kubebuilder/kube-apiserver
-export TEST_ASSET_KUBECTL=_test/kubebuilder/kubectl
 
 test: _test/kubebuilder
-	TEST_ASSET_ETCD=./_test/etcd $(GO) test -v .
+	TEST_ZONE_NAME=example.com. \
+	TEST_ASSET_ETCD=_test/kubebuilder/bin/etcd \
+	TEST_ASSET_KUBE_APISERVER=_test/kubebuilder/bin/kube-apiserver \
+	TEST_ASSET_KUBECTL=_test/kubebuilder/bin/kubectl \
+	$(GO) test -v .
 
 _test/kubebuilder:
-	curl -fsSL https://go.kubebuilder.io/test-tools/$(KUBE_VERSION)/$(OS)/$(ARCH) -o kubebuilder-tools.tar.gz
+	curl -fsSL https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_${OS}_${ARCH}.tar.gz -o kubebuilder-tools.tar.gz
 	mkdir -p _test/kubebuilder
 	tar -xvf kubebuilder-tools.tar.gz
-	mv kubebuilder/bin/* _test/kubebuilder/
+	mv kubebuilder_${KUBEBUILDER_VERSION}_${OS}_${ARCH}/bin _test/kubebuilder/
 	rm kubebuilder-tools.tar.gz
-	rm -R kubebuilder
+	rm -R kubebuilder_${KUBEBUILDER_VERSION}_${OS}_${ARCH}
 
 clean: clean-kubebuilder
 

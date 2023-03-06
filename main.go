@@ -226,7 +226,8 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 	}
 
 	klog.Infof("Configuration parsed in %+v", cfg)
-	if (cfg.Token == nil && cfg.UserName == nil) || cfg.SecretRef == nil {
+	if (cfg.UserName == nil || cfg.Token == nil || cfg.SecretRef != nil) &&
+		(cfg.UserName != nil || cfg.Token == nil || cfg.SecretRef == nil) {
 
 		klog.Error("either pair username/token or secretRef must be specified")
 		return nil, errors.New("either pair username/token or secretRef must be specified")
