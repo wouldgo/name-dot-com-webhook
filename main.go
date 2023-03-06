@@ -210,6 +210,7 @@ func (c *nameDotComDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, 
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
 func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDotComDNSProviderConfig, error) {
+	klog.Infof("Presenting configuration %+v", cfgJSON)
 	cfg := nameDotComDNSProviderConfig{}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
@@ -224,6 +225,7 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 		return nil, fmt.Errorf("error decoding solver config: %v", err)
 	}
 
+	klog.Infof("Configuration parsed in %+v", cfg)
 	if (cfg.Token == nil && cfg.UserName == nil) || cfg.SecretRef == nil {
 
 		klog.Error("either pair username/token or secretRef must be specified")
