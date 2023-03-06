@@ -3,7 +3,7 @@ OS ?= $(shell $(GO) env GOOS)
 ARCH ?= $(shell $(GO) env GOARCH)
 
 IMAGE_NAME := "ghcr.io/wouldgo/name-dot-com-webhook"
-IMAGE_TAG := "0.0.6"
+IMAGE_TAG := "0.0.7"
 
 OUT := $(shell pwd)/_out
 
