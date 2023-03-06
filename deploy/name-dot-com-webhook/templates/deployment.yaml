@@ -35,16 +35,26 @@ spec:
             - name: https
               containerPort: 443
               protocol: TCP
-          livenessProbe:
-            httpGet:
-              scheme: HTTPS
-              path: /healthz
+          startupProbe:
+            tcpSocket:
               port: https
+            failureThreshold: 200
+            initialDelaySeconds: 5
+            periodSeconds: 15
           readinessProbe:
+            tcpSocket:
+              port: https
+            failureThreshold: 10
+            initialDelaySeconds: 1
+            periodSeconds: 10
+          livenessProbe:
+            failureThreshold: 3
             httpGet:
-              scheme: HTTPS
               path: /healthz
               port: https
+              scheme: HTTPS
+            initialDelaySeconds: 1
+            periodSeconds: 44
           volumeMounts:
             - name: certs
               mountPath: /tls

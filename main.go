@@ -13,11 +13,14 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/apis/acme/v1alpha1"
 	"github.com/cert-manager/cert-manager/pkg/acme/webhook/cmd"
 	"github.com/cert-manager/cert-manager/pkg/issuer/acme/dns/util"
 	"github.com/namedotcom/go/namecom"
+
+	_ "github.com/breml/rootcerts"
 )
 
 var GroupName = os.Getenv("GROUP_NAME")
@@ -27,14 +30,13 @@ func main() {
 		panic("GROUP_NAME must be specified")
 	}
 
+	nameDotComDnsProviderSolver := &nameDotComDNSProviderSolver{}
 	// This will register our custom DNS provider with the webhook serving
 	// library, making it available as an API under the provided GroupName.
 	// You can register multiple DNS provider implementations with a single
 	// webhook, where the Name() method will be used to disambiguate between
 	// the different implementations.
-	cmd.RunWebhookServer(GroupName,
-		&nameDotComDNSProviderSolver{},
-	)
+	cmd.RunWebhookServer(GroupName, nameDotComDnsProviderSolver)
 }
 
 // nameDotComDNSProviderSolver implements the provider-specific logic needed to
@@ -93,6 +95,10 @@ func (c *nameDotComDNSProviderSolver) Name() string {
 // cert-manager itself will later perform a self check to ensure that the
 // solver has correctly configured the DNS provider.
 func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) error {
+	host := extractRecordName(ch.ResolvedFQDN, ch.ResolvedZone)
+	domainName := ch.ResolvedZone[:len(ch.ResolvedZone)-1]
+
+	klog.Infof("Creating TXT record for %s", domainName)
 	cfg, err := c.loadConfig(ch.Config)
 	if err != nil {
 		return err
@@ -105,8 +111,8 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 
 	newRecord := &namecom.Record{
 		Type:       "TXT",
-		Host:       extractRecordName(ch.ResolvedFQDN, ch.ResolvedZone),
-		DomainName: ch.ResolvedZone[:len(ch.ResolvedZone)-1],
+		Host:       host,
+		DomainName: domainName,
 		Answer:     ch.Key,
 		TTL:        300,
 	}
@@ -114,9 +120,11 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 	_, err = c.nameDotComClient.CreateRecord(newRecord)
 	if err != nil {
 
+		klog.Errorf("TXT record creation for %s in error: %s", domainName, err.Error())
 		return err
 	}
 
+	klog.Infof("TXT record for %s created", domainName)
 	return nil
 }
 
@@ -127,6 +135,10 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 // This is in order to facilitate multiple DNS validations for the same domain
 // concurrently.
 func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) error {
+	domainName := ch.ResolvedZone[:len(ch.ResolvedZone)-1]
+	host := extractRecordName(ch.ResolvedFQDN, ch.ResolvedZone)
+
+	klog.Infof("Removing TXT record for %s", domainName)
 	cfg, err := c.loadConfig(ch.Config)
 	if err != nil {
 		return err
@@ -137,15 +149,14 @@ func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) err
 		c.nameDotComClient = namecom.New(*cfg.UserName, *cfg.Token)
 	}
 
-	domainName := ch.ResolvedZone[:len(ch.ResolvedZone)-1]
-	host := extractRecordName(ch.ResolvedFQDN, ch.ResolvedZone)
-
 	listReq := &namecom.ListRecordsRequest{
 		DomainName: domainName,
 	}
 
 	listRecordResponse, listErr := c.nameDotComClient.ListRecords(listReq)
 	if listErr != nil {
+
+		klog.Errorf("TXT record deletion for %s in error: %s", domainName, listErr.Error())
 		return listErr
 	}
 
@@ -166,9 +177,11 @@ func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) err
 	_, deleteErr := c.nameDotComClient.DeleteRecord(deleteReq)
 	if deleteErr != nil {
 
+		klog.Errorf("TXT record deletion for %s in error: %s", domainName, deleteErr.Error())
 		return deleteErr
 	}
 
+	klog.Infof("TXT record for %s deleted", domainName)
 	return nil
 }
 
@@ -182,10 +195,13 @@ func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) err
 // The stopCh can be used to handle early termination of the webhook, in cases
 // where a SIGTERM or similar signal is sent to the webhook process.
 func (c *nameDotComDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, stopCh <-chan struct{}) error {
+	klog.Infof("Initializing %s", c.Name())
 	clientset, err := kubernetes.NewForConfig(kubeClientConfig)
 	if err != nil {
 		return err
 	}
+
+	klog.Infof("K8s client initialized with %+v", kubeClientConfig)
 	c.client = *clientset
 
 	return nil
@@ -197,15 +213,21 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 	cfg := nameDotComDNSProviderConfig{}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
-		return nil, errors.New("Configuration must be provided")
+
+		klog.Error("configuration must be provided")
+		return nil, errors.New("configuration must be provided")
 	}
 
 	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
+
+		klog.Error("error decoding solver config: %v", err.Error())
 		return nil, fmt.Errorf("error decoding solver config: %v", err)
 	}
 
 	if (cfg.Token == nil && cfg.UserName == nil) || cfg.SecretRef == nil {
-		return nil, errors.New("Either pair username/token or secretRef must be specified ")
+
+		klog.Error("either pair username/token or secretRef must be specified")
+		return nil, errors.New("either pair username/token or secretRef must be specified")
 	}
 
 	if cfg.SecretRef != nil {
@@ -229,7 +251,8 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 
 		if secretData["username"] == nil || secretData["token"] == nil {
 
-			return nil, fmt.Errorf("Secret %s/%s not containing either username or token", *secretNamespace, *secretName)
+			klog.Error("secret %s/%s not containing either username or token", *secretNamespace, *secretName)
+			return nil, fmt.Errorf("secret %s/%s not containing either username or token", *secretNamespace, *secretName)
 		}
 
 		*cfg.UserName = string(secretData["username"])
@@ -244,7 +267,9 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 		}
 	}
 
-	return cfg, nil
+	klog.Infof("Configuration for %s read", *cfg.UserName)
+
+	return &cfg, nil
 }
 
 func extractRecordName(fqdn, domain string) string {

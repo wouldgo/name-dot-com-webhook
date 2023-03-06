@@ -1,12 +1,8 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-<<<<<<< HEAD:deploy/name-dot-com-webhook/templates/rbac.yaml
-  name: {{ include "example-webhook.name" . }}
-=======
   name: {{ include "example-webhook.fullname" . }}
   namespace: {{ .Release.Namespace | quote }}
->>>>>>> 9ea71aef37e6d43d4ca4d57a0582f47f795e6d7f:deploy/example-webhook/templates/rbac.yaml
   labels:
     app: {{ include "example-webhook.name" . }}
     chart: {{ include "example-webhook.chart" . }}
@@ -34,7 +30,7 @@ subjects:
   - apiGroup: ""
     kind: ServiceAccount
     name: {{ include "example-webhook.name" . }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ .Release.Namespace | quote }}
 ---
 # apiserver gets the auth-delegator role to delegate auth decisions to
 # the core apiserver
@@ -55,7 +51,7 @@ subjects:
   - apiGroup: ""
     kind: ServiceAccount
     name: {{ include "example-webhook.name" . }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ .Release.Namespace | quote }}
 ---
 # Grant cert-manager permission to validate using our apiserver
 apiVersion: rbac.authorization.k8s.io/v1
@@ -76,6 +72,27 @@ rules:
       - 'create'
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "example-webhook.name" . }}:flowcontrol
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ include "example-webhook.name" . }}
+    chart: {{ include "example-webhook.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+rules:
+  -
+    apiGroups:
+      - flowcontrol.apiserver.k8s.io
+    resources:
+      - flowschemas
+      - prioritylevelconfigurations
+    verbs:
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: {{ include "example-webhook.name" . }}:domain-solver
@@ -93,3 +110,21 @@ subjects:
     kind: ServiceAccount
     name: {{ .Values.certManager.serviceAccountName }}
     namespace: {{ .Values.certManager.namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "example-webhook.name" . }}:flowcontrol
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    app: {{ include "example-webhook.name" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "example-webhook.name" . }}:flowcontrol
+subjects:
+  - apiGroup: ""
+    kind: ServiceAccount
+    name: {{ include "example-webhook.name" . }}
+    namespace: {{ .Release.Namespace | quote }}
+---

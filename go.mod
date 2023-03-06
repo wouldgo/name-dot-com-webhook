@@ -7,6 +7,7 @@ go 1.19
 replace github.com/cert-manager/cert-manager => github.com/cert-manager/cert-manager v1.11.1-0.20230119150913-7ebb5f515e4f
 
 require (
+  github.com/breml/rootcerts v0.2.10
 	github.com/cert-manager/cert-manager v1.11.0
 	github.com/miekg/dns v1.1.51
 	github.com/namedotcom/go v0.0.0-20180403034216-08470befbe04
