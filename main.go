@@ -46,16 +46,14 @@ func main() {
 // interface.
 type nameDotComDNSProviderSolver struct {
 	client kubernetes.Clientset
-
-	nameDotComClient *namecom.NameCom
 }
 
 var _ webhook.Solver = (*nameDotComDNSProviderSolver)(nil)
 
 // customDNSProviderConfig is a structure that is used to decode into when
 type secretRefType struct {
-	Name      *string `json:"name"`
-	Namespace *string `json:"namespace"`
+	Name      string `json:"name,omitempty,omitzero"`
+	Namespace string `json:"namespace,omitempty,omitzero"`
 }
 
 // nameDotComDNSProviderConfig is a structure that is used to decode into when
@@ -78,9 +76,9 @@ type nameDotComDNSProviderConfig struct {
 	// These fields will be set by users in the
 	// `issuer.spec.acme.dns01.providers.webhook.config` field.
 
-	UserName  *string        `json:"username"`
-	Token     *string        `json:"token"`
-	SecretRef *secretRefType `json:"secretMapRef"`
+	UserName  string         `json:"username,omitempty,omitzero"`
+	Token     string         `json:"token,omitempty,omitzero"`
+	SecretRef *secretRefType `json:"secretRef,omitempty"`
 }
 
 // Name is used as the name for this DNS solver when referencing it on the ACME
@@ -108,10 +106,7 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 		return err
 	}
 
-	if c.nameDotComClient == nil {
-
-		c.nameDotComClient = namecom.New(*cfg.UserName, *cfg.Token)
-	}
+	nameDotComClient := namecom.New(cfg.UserName, cfg.Token)
 
 	newRecord := &namecom.Record{
 		Type:       "TXT",
@@ -121,7 +116,7 @@ func (c *nameDotComDNSProviderSolver) Present(ch *v1alpha1.ChallengeRequest) err
 		TTL:        300,
 	}
 
-	_, err = c.nameDotComClient.CreateRecord(newRecord)
+	_, err = nameDotComClient.CreateRecord(newRecord)
 	if err != nil {
 
 		klog.Errorf("TXT record creation for %s in error: %s", domainName, err.Error())
@@ -148,16 +143,13 @@ func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) err
 		return err
 	}
 
-	if c.nameDotComClient == nil {
-
-		c.nameDotComClient = namecom.New(*cfg.UserName, *cfg.Token)
-	}
+	nameDotComClient := namecom.New(cfg.UserName, cfg.Token)
 
 	listReq := &namecom.ListRecordsRequest{
 		DomainName: domainName,
 	}
 
-	listRecordResponse, listErr := c.nameDotComClient.ListRecords(listReq)
+	listRecordResponse, listErr := nameDotComClient.ListRecords(listReq)
 	if listErr != nil {
 
 		klog.Errorf("TXT record deletion for %s in error: %s", domainName, listErr.Error())
@@ -178,7 +170,7 @@ func (c *nameDotComDNSProviderSolver) CleanUp(ch *v1alpha1.ChallengeRequest) err
 		DomainName: domainName,
 	}
 
-	_, deleteErr := c.nameDotComClient.DeleteRecord(deleteReq)
+	_, deleteErr := nameDotComClient.DeleteRecord(deleteReq)
 	if deleteErr != nil {
 
 		klog.Errorf("TXT record deletion for %s in error: %s", domainName, deleteErr.Error())
@@ -214,25 +206,22 @@ func (c *nameDotComDNSProviderSolver) Initialize(kubeClientConfig *rest.Config, 
 // loadConfig is a small helper function that decodes JSON configuration into
 // the typed config struct.
 func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDotComDNSProviderConfig, error) {
-	klog.Infof("Presenting configuration %+v", cfgJSON)
+	klog.Info("Loading configuration...")
 	cfg := nameDotComDNSProviderConfig{}
 	// handle the 'base case' where no configuration has been provided
 	if cfgJSON == nil {
-
 		klog.Error("configuration must be provided")
 		return nil, errors.New("configuration must be provided")
 	}
 
 	if err := json.Unmarshal(cfgJSON.Raw, &cfg); err != nil {
-
-		klog.Error("error decoding solver config: %v", err.Error())
+		klog.Errorf("error decoding solver config: %v", err.Error())
 		return nil, fmt.Errorf("error decoding solver config: %v", err)
 	}
 
-	klog.Infof("Configuration parsed in %+v", cfg)
-	if ((cfg.UserName == nil || cfg.Token == nil || cfg.SecretRef != nil) &&
-		(cfg.UserName != nil || cfg.Token != nil || cfg.SecretRef == nil)) ||
-		(cfg.UserName == nil && cfg.Token == nil && cfg.SecretRef == nil) {
+	if ((cfg.UserName == "" || cfg.Token == "" || cfg.SecretRef != nil) &&
+		(cfg.UserName != "" || cfg.Token != "" || cfg.SecretRef == nil)) ||
+		(cfg.UserName == "" && cfg.Token == "" && cfg.SecretRef == nil) {
 
 		klog.Error("either pair username/token or secretRef must be specified")
 		return nil, errors.New("either pair username/token or secretRef must be specified")
@@ -243,13 +232,19 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 		secretNamespace := cfg.SecretRef.Namespace
 		secretName := cfg.SecretRef.Name
 
-		if secretNamespace == nil {
-			*secretNamespace = "name-dot-com"
+		if secretNamespace == "" {
+			secretNamespace = "name-dot-com"
+		}
+
+		if cfg.SecretRef.Name == "" {
+			return nil, errors.New("secretRef.name must be specified")
 		}
 
 		ctx, cancelFunct := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelFunct()
-		secret, secretErr := c.client.CoreV1().Secrets(*secretNamespace).Get(ctx, *secretName, v1.GetOptions{})
+		secret, secretErr := c.client.CoreV1().
+			Secrets(secretNamespace).
+			Get(ctx, secretName, v1.GetOptions{})
 
 		if secretErr != nil {
 			return nil, secretErr
@@ -259,23 +254,15 @@ func (c *nameDotComDNSProviderSolver) loadConfig(cfgJSON *extapi.JSON) (*nameDot
 
 		if secretData["username"] == nil || secretData["token"] == nil {
 
-			klog.Error("secret %s/%s not containing either username or token", *secretNamespace, *secretName)
-			return nil, fmt.Errorf("secret %s/%s not containing either username or token", *secretNamespace, *secretName)
+			klog.Errorf("secret %s/%s not containing either username or token", secretNamespace, secretName)
+			return nil, fmt.Errorf("secret %s/%s not containing either username or token", secretNamespace, secretName)
 		}
 
-		*cfg.UserName = string(secretData["username"])
-		*cfg.Token = string(secretData["token"])
-
-		select {
-		case <-ctx.Done():
-
-			return nil, ctx.Err()
-		default:
-
-		}
+		cfg.UserName = string(secretData["username"])
+		cfg.Token = string(secretData["token"])
 	}
 
-	klog.Infof("Configuration for %s read", *cfg.UserName)
+	klog.Infof("Configuration for %s read", cfg.UserName)
 
 	return &cfg, nil
 }
